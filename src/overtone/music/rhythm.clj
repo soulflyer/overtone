@@ -105,7 +105,9 @@
   with no arguments to get the next beat number, or pass it a beat number
   to get the timestamp to play a note at that beat.
 
-  Metronome should also be able to work with bars
+  Metronome also works with bars. Set the number of beats per bar using
+  metro-bpb (defaults to 4). metro-bar returns a timestamp that can be used
+  to play a note relative to a specified bar.
 
   (def m (metronome 128))
   (m)          ; => <next beat number>
