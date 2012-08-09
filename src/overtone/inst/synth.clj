@@ -5,6 +5,21 @@
         [overtone.music pitch]
         [overtone.studio mixer inst]))
 
+(definst supersaw [freq 440 amp 1]
+  (let [input  (lf-saw freq)
+        shift1 (lf-saw 4)
+        shift2 (lf-saw 7)
+        shift3 (lf-saw 5)
+        shift4 (lf-saw 2)
+        comp1  (> input shift1)
+        comp2  (> input shift2)
+        comp3  (> input shift3)
+        comp4  (> input shift4)
+        output (+ (- input comp1) (- input comp2) (- input comp3) (- input comp4))
+        output (- output input)
+        output (leak-dc:ar (* output 0.25))]
+    (* amp output)))
+
 (definst ticker
   [freq 880]
   (* (env-gen (perc 0.001 0.01) :action FREE)
@@ -27,7 +42,8 @@
    sustain    {:default 0.6 :min 0.001 :max 0.99 :step 0.001}
    release    {:default 0.01 :min 0.001 :max 4 :step 0.001}
    cutoff     {:default 100 :min 1 :max 20000 :step 1}
-   env-amount {:default 0.01 :min 0.001 :max 4 :step 0.001}]
+   env-amount {:default 0.01 :min 0.001 :max 4 :step 0.001}
+   amp        {:default 0.5 :min 0 :max 1 :step 0.01}]
   (let [freq       (midicps note)
         freqs      [freq (* 1.01 freq)]
         vol-env    (env-gen (adsr attack decay sustain release)
@@ -35,13 +51,13 @@
                             :action FREE)
         fil-env    (env-gen (perc))
         fil-cutoff (+ cutoff (* env-amount fil-env))
-        waves     (* vol-env
-                     [(saw freqs)
-                      (pulse freqs 0.5)
-                      (lf-tri freqs)])
+        waves      (* vol-env
+                      [(saw freqs)
+                       (pulse freqs 0.5)
+                       (lf-tri freqs)])
         selector   (select wave waves)
         filt       (rlpf selector fil-cutoff r)]
-    (* 0.5 filt)))
+    (* amp filt)))
 
 (definst mooger
   "Choose 0, 1, or 2 for saw, sin, or pulse"
@@ -61,14 +77,14 @@
    fsustain {:default 0.999 :min 0.0001 :max 1 :step 0.001}
    frelease {:default 0.0001 :min 0.0001 :max 6 :step 0.001}
    gate 1]
-  (let [freq (midicps note)
+  (let [freq       (midicps note)
         osc-bank-1 [(saw freq) (sin-osc freq) (pulse freq)]
         osc-bank-2 [(saw freq) (sin-osc freq) (pulse freq)]
-        amp-env (env-gen (adsr attack decay sustain release) gate :action FREE)
-        f-env (env-gen (adsr fattack fdecay fsustain frelease) gate)
-        s1 (* osc1-level (select osc1 osc-bank-1))
-        s2 (* osc2-level (select osc2 osc-bank-2))
-        filt (moog-ff (+ s1 s2) (* cutoff f-env) 3)]
+        amp-env    (env-gen (adsr attack decay sustain release) gate :action FREE)
+        f-env      (env-gen (adsr fattack fdecay fsustain frelease) gate)
+        s1         (* osc1-level (select osc1 osc-bank-1))
+        s2         (* osc2-level (select osc2 osc-bank-2))
+        filt       (moog-ff (+ s1 s2) (* cutoff f-env) 3)]
     (* amp filt)))
 
 (definst rise-fall-pad
@@ -88,17 +104,17 @@
 
 (definst pad
   [note 60 t 10 amt 0.3 amp 0.1 a 0.4 d 0.5 s 0.8 r 2]
-  (let [freq       (midicps note)
-        lfo        (+ 2 (* 0.01 (sin-osc:kr 5 (rand 1.5))))
-        src        (apply + (saw [freq (* freq lfo)]))
-        env        (env-gen (adsr a d s r) (sin-osc:kr 0.2))
-        f-env      (x-line:kr 0.001 4 t)
-        src        (* env src)
-        signal     (rlpf src (+ (* 0.3 freq) (* f-env 2 freq)) 0.5)
-        k          (/ (* 4 amt) (- 1 amt))
-        dist       (clip2 (/ (* (+ 1 k) signal) (+ 1 (* k (abs signal))))
-                          0.03)
-        snd        (* amp dist (line:kr 1 0 t))]
+  (let [freq   (midicps note)
+        lfo    (+ 2 (* 0.01 (sin-osc:kr 5 (rand 1.5))))
+        src    (apply + (saw [freq (* freq lfo)]))
+        env    (env-gen (adsr a d s r) (sin-osc:kr 0.2))
+        f-env  (x-line:kr 0.001 4 t)
+        src    (* env src)
+        signal (rlpf src (+ (* 0.3 freq) (* f-env 2 freq)) 0.5)
+        k      (/ (* 4 amt) (- 1 amt))
+        dist   (clip2 (/ (* (+ 1 k) signal) (+ 1 (* k (abs signal))))
+                      0.03)
+        snd    (* amp dist (line:kr 1 0 t))]
     src))
 
 (definst overpad
@@ -116,31 +132,39 @@
 (definst buzz
   [pitch 40 cutoff 300 dur 200]
   (let [lpf-lev (* (+ 1 (lf-noise1:kr 10)) 400)
-        a (lpf (saw (midicps pitch)) lpf-lev)
-        b (sin-osc (midicps (- pitch 12)))
-        env (env-gen 1 1 0 1 2 (perc 0.01 (/ dur 1000)))]
+        a       (lpf (saw (midicps pitch)) lpf-lev)
+        b       (sin-osc (midicps (- pitch 12)))
+        env     (env-gen 1 1 0 1 2 (perc 0.01 (/ dur 1000)))]
     (* env (+ a b))))
 
 (definst bass
   [freq 120 t 0.6 amp 0.5]
-  (let [env (env-gen (perc 0.08 t) :action FREE)
-        src (saw [freq (* 0.98 freq) (* 2.015 freq)])
-        src (clip2 (* 1.3 src) 0.8)
-        sub (sin-osc (/ freq 2))
+  (let [env  (env-gen (perc 0.08 t) :action FREE)
+        src  (saw [freq (* 0.98 freq) (* 2.015 freq)])
+        src  (clip2 (* 1.3 src) 0.8)
+        sub  (sin-osc (/ freq 2))
         filt (resonz (rlpf src (* 4.4 freq) 0.09) (* 2.0 freq) 2.9)]
     (* env amp (fold:ar (distort (* 1.3 (+ filt sub))) 0.08))))
 
+(definst daf-bass [freq 440 gate 1 amp 1 out-bus 0]
+  (let [harm [1 1.01 2 2.02 3.5 4.01 5.501]
+        harm (concat harm (map #(* 2 %) harm))
+        snd  (* 2 (distort (sum (sin-osc (* freq harm)))))
+        snd  (+ snd (repeat 2 (sum (sin-osc (/ freq [1 2])))))
+        env  (env-gen (adsr 0.001 0.2 0.9 0.25) gate amp :action FREE)]
+    (* snd env)))
+
 (definst grunge-bass
   [note 48 amp 0.5 dur 0.1 a 0.01 d 0.01 s 0.4 r 0.01]
-  (let [freq (midicps note)
-        env (env-gen (adsr a d s r) (line:kr 1 0 (+ a d dur r 0.1))
-                     :action FREE)
-        src (saw [freq (* 0.98 freq) (* 2.015 freq)])
-        src (clip2 (* 1.3 src) 0.9)
-        sub (sin-osc (/ freq 2))
-        filt (resonz (rlpf src (* 8.4 freq) 0.29) (* 2.0 freq) 2.9)
-        meat (ring4 filt sub)
-        sliced (rlpf meat (* 2 freq) 0.1)
+  (let [freq    (midicps note)
+        env     (env-gen (adsr a d s r) (line:kr 1 0 (+ a d dur r 0.1))
+                         :action FREE)
+        src     (saw [freq (* 0.98 freq) (* 2.015 freq)])
+        src     (clip2 (* 1.3 src) 0.9)
+        sub     (sin-osc (/ freq 2))
+        filt    (resonz (rlpf src (* 8.4 freq) 0.29) (* 2.0 freq) 2.9)
+        meat    (ring4 filt sub)
+        sliced  (rlpf meat (* 2 freq) 0.1)
         bounced (free-verb sliced 0.8 0.9 0.2)]
     (* env bounced)))
 
@@ -170,7 +194,7 @@
 ; Work in progress...  just getting started
 (comment definst b3
   [note 60 a 0.01 d 3 s 1 r 0.01]
-  (let [freq (midicps note)
+  (let [freq  (midicps note)
         waves (sin-osc [(* 0.5 freq)
                         freq
                         (* (/ 3 2) freq)
@@ -180,8 +204,8 @@
                         (* freq 2 2 (/ 5 4))
                         (* freq 2 2 (/ 3 2))
                         (* freq 2 2 2)])
-        snd (apply + waves)
-        env (env-gen (adsr a d s r) :action FREE)]
+        snd   (apply + waves)
+        env   (env-gen (adsr a d s r) :action FREE)]
     (* env snd 0.1)))
 
 ; Experimenting with Karplus Strong synthesis...
