@@ -73,6 +73,7 @@
           new-start     (- (metro-beat metro cur-beat) (* new-tick cur-beat))
           new-bar-start (- (metro-bar metro cur-bar) (* new-tock cur-bar))]
       (reset! start new-start)
+      (reset! bar-start new-bar-start)
       (reset! bpm new-bpm))
     [:bpm new-bpm])
   (metro-bpb   [metro] @bpb)
@@ -130,19 +131,3 @@
 ; * jazz groove, latin groove
 ; * techno grooves (hard on beat one)
 ; * make something more driving, or more layed back...
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
